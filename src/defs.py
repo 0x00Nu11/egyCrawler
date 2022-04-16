@@ -3,6 +3,7 @@ from fake_useragent import UserAgent
 from selenium import webdriver
 from selenium.webdriver import ActionChains
 import requests, json, time, sys
+
 useragent=UserAgent().chrome
 headers={
     "accept-language": "en-US,en;q=0.9",
@@ -26,7 +27,7 @@ def searchSite(query):
     moviesList=[]
     query=f"https://lake.egybest.life/explore/?q={makeURL(query)}"
     text=requests.get(query, headers=headers).text
-    soup=BeautifulSoup(text, 'lxml')
+    soup=BeautifulSoup(text, 'html.parser')
     mainFrame=soup.find_all('div', class_='movies')
     for i in mainFrame:
         movie=i.find_all('a')
@@ -54,7 +55,6 @@ def pickMovie(movies):
 def setupSelenium(operatingSystem):
     chromeOptions=webdriver.ChromeOptions()
     chromePrefs={}
-    chromePrefs["download.download_restrictions"]=0
     chromeOptions.add_experimental_option("prefs", chromePrefs)
     chromeOptions.add_argument('--incognito')
     #chromeOptions.add_argument('--headless')
@@ -86,7 +86,7 @@ def getDownloadLink(operatingSystem, link):
     driver=setupSelenium(operatingSystem)
     text=requests.get(link, headers=headers).text
     driver.get(link)
-    soup=BeautifulSoup(text, 'lxml')
+    soup=BeautifulSoup(text, 'html.parser')
     infoTable=soup.find('tbody')
     infoHeaders=infoTable.find_all('tr')
     td=[tr.find_all('td') for tr in infoHeaders]
@@ -99,135 +99,53 @@ def getDownloadLink(operatingSystem, link):
         buttons=dl.find('a')
         attribs.append([quality, resolution, size, buttons])
     x=chooseResolution(attribs)
-    refresh='?refresh='
-    redirect='&r='
-    vsmirror='vs-mirror'
     downloadURL=''
     while downloadURL=='':
         time.sleep(1)
         driver.execute_script("window.stop();")
-        if 'egybest' not in str(driver.current_url):
-            print('closing popup ads and redirects.')
-            driver.close()
-        elif vsmirror in str(driver.current_url):
-            print('fetching download URL.')
-            downloadURL=str(driver.current_url)
-            break
-        elif refresh in str(driver.current_url):
-            driver.close()
-        elif redirect in str(driver.current_url):
-            print("request was blocked. make sure you don't have adblock.\nretrying...")
-            reloadPage=driver.find_element_by_xpath('//*[@id="mainLoad"]/div/a')
-            ActionChains(driver).click(reloadPage).perform()
-        else:
-            print('fetching download page')
-            button=driver.find_element_by_xpath(f'//*[@id="watch_dl"]/table/tbody/tr[{x}]/td[4]/a[1]')
-            ActionChains(driver).click(button).perform()
-        driver.switch_to_window(driver.window_handles[len(driver.window_handles)-1])
-
-    wgetLink=''
-    while True:
+        time.sleep(1)
         currentURL=driver.current_url
-        driver.execute_script("window.stop();")
-        if str(currentURL)!=str(downloadURL) and 'ebybest' not in str(currentURL):
-            driver.close()
-            driver.switch_to_window(driver.window_handles[len(driver.window_handles)-1])
-        elif str(currentURL)!=str(downloadURL) and 'egybest' in str(currentURL):
-            print('retrying to fetch download page')
-            button=driver.find_element_by_xpath(f'//*[@id="watch_dl"]/table/tbody/tr[{x}]/td[4]/a[1]')
-            ActionChains(driver).click(button).perform()
+        if 'egybest' in str(currentURL):
+            downloadURL=manageRedirects(driver, currentURL, x)
         else:
-            downloadButton=driver.find_element_by_xpath('/html/body/div[1]/div/p/a[1]')
-            wgetLink=downloadButton.get_attribute('href')
-            if wgetLink=='' or wgetLink==None:
-                ActionChains(driver).click(downloadButton).perform()
-            else:
-                break
-    print(wgetLink)
+            driver.close()
+        driver.switch_to.window(driver.window_handles[len(driver.window_handles)-1])
+    wgetDownload=fetchDownload(driver, downloadURL)
+    print(wgetDownload)
     
-def manageRedirects():
-    while downloadURL=='':
+def manageRedirects(driver, currentURL, x):
+    if '&r=' in str(currentURL):
+        print("request was blocked. make sure you don't have adblock.\nretrying...")
+        reloadPage=driver.find_element_by_xpath('//*[@id="mainLoad"]/div/a')
+        ActionChains(driver).click(reloadPage).perform()
+    elif '?refresh=' in str(currentURL):
+        driver.close()
+    elif 'vs-mirror' in str(currentURL):
+        print('fetching download URL...')
+        downloadURL=str(currentURL)
+        return downloadURL
+    else:
+        print('fetching download page...')
+        button=driver.find_element_by_xpath(f'//*[@id="watch_dl"]/table/tbody/tr[{x}]/td[4]/a[1]')
+        ActionChains(driver).click(button).perform()
+    return ''
+
+def fetchDownload(driver, downloadURL):
+    wgetDownload=''
+    while wgetDownload=='':
         time.sleep(1)
         driver.execute_script("window.stop();")
-        if 'egybest' not in str(driver.current_url):
-            print('closing popup ads and redirects.')
-            driver.close()
-        elif vsmirror in str(driver.current_url):
-            print('fetching download URL.')
-            downloadURL=str(driver.current_url)
-            break
-        elif refresh in str(driver.current_url):
-            driver.close()
-        elif redirect in str(driver.current_url):
-            print("request was blocked. make sure you don't have adblock.\nretrying...")
-            reloadPage=driver.find_element_by_xpath('//*[@id="mainLoad"]/div/a')
-            ActionChains(driver).click(reloadPage).perform()
-        else:
-            print('fetching download page')
-            button=driver.find_element_by_xpath(f'//*[@id="watch_dl"]/table/tbody/tr[{x}]/td[4]/a[1]')
-            ActionChains(driver).click(button).perform()
-        driver.switch_to_window(driver.window_handles[len(driver.window_handles)-1])
-    wgetLink=''
-    while True:
+        time.sleep(1)
         currentURL=driver.current_url
-        driver.execute_script("window.stop();")
-        if str(currentURL)!=str(downloadURL) and 'ebybest' not in str(currentURL):
+        if str(downloadURL) not in str(currentURL):
             driver.close()
-            driver.switch_to_window(driver.window_handles[len(driver.window_handles)-1])
-        elif str(currentURL)!=str(downloadURL) and 'egybest' in str(currentURL):
-            print('retrying to fetch download page')
-            button=driver.find_element_by_xpath(f'//*[@id="watch_dl"]/table/tbody/tr[{x}]/td[4]/a[1]')
-            ActionChains(driver).click(button).perform()
         else:
-            downloadButton=driver.find_element_by_xpath('/html/body/div[1]/div/p/a[1]')
-            wgetLink=downloadButton.get_attribute('href')
-            if wgetLink=='' or wgetLink==None:
-                ActionChains(driver).click(downloadButton).perform()
+            dlButton=driver.find_element_by_xpath('/html/body/div[1]/div/p/a[1]')
+            dlbClass=dlButton.get_attribute('class')
+            if dlbClass=='bigbutton':
+                wgetDownload=dlButton.get_attribute('href')
+                return wgetDownload
             else:
-                break
-    print(wgetLink)
-    
-def fetchDownload():
-    while downloadURL=='':
-        try:
-            time.sleep(1)
-            driver.execute_script("window.stop();")
-            if 'egybest' not in str(driver.current_url):
-                print('closing popup ads and redirects.')
-                driver.close()
-            elif vsmirror in str(driver.current_url):
-                print('fetching download URL.')
-                downloadURL=str(driver.current_url)
-                break
-            elif refresh in str(driver.current_url):
-                driver.close()
-            elif redirect in str(driver.current_url):
-                print("request was blocked. make sure you don't have adblock.\nretrying...")
-                reloadPage=driver.find_element_by_xpath('//*[@id="mainLoad"]/div/a')
-                ActionChains(driver).click(reloadPage).perform()
-            else:
-                print('fetching download page')
-                button=driver.find_element_by_xpath(f'//*[@id="watch_dl"]/table/tbody/tr[{x}]/td[4]/a[1]')
-                ActionChains(driver).click(button).perform()
-            driver.switch_to_window(driver.window_handles[len(driver.window_handles)-1])
-        except:
-            pass
-    wgetLink=''
-    while True:
-        currentURL=driver.current_url
-        driver.execute_script("window.stop();")
-        if str(currentURL)!=str(downloadURL) and 'ebybest' not in str(currentURL):
-            driver.close()
-            driver.switch_to_window(driver.window_handles[len(driver.window_handles)-1])
-        elif str(currentURL)!=str(downloadURL) and 'egybest' in str(currentURL):
-            print('retrying to fetch download page')
-            button=driver.find_element_by_xpath(f'//*[@id="watch_dl"]/table/tbody/tr[{x}]/td[4]/a[1]')
-            ActionChains(driver).click(button).perform()
-        else:
-            downloadButton=driver.find_element_by_xpath('/html/body/div[1]/div/p/a[1]')
-            wgetLink=downloadButton.get_attribute('href')
-            if wgetLink=='' or wgetLink==None:
-                ActionChains(driver).click(downloadButton).perform()
-            else:
-                break
-    print(wgetLink)
+                ActionChains(driver).click(dlButton).perform()
+        driver.switch_to.window(driver.window_handles[len(driver.window_handles)-1])
+            
