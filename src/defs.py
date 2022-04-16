@@ -76,7 +76,11 @@ def chooseResolution(attribs):
         count+=1
     try:
         chosenResolution=int(input('|_(choose by number)-->> '))
-        return chosenResolution
+        if chosenResolution<=len(attribs)-1:
+            return chosenResolution
+        else:
+            print('invalid option')
+            chooseResolution(attribs)
     except:
         print('invalid option.')
         chooseResolution(attribs)
