@@ -5,13 +5,35 @@ from selenium.webdriver import ActionChains
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import TimeoutException
 from pyvirtualdisplay import Display
-import requests, json, time, sys
+import requests, json, time, sys, urllib.request, progressbar
 
 useragent=UserAgent().chrome
 headers={
     "accept-language": "en-US,en;q=0.9",
     "user-agent": str(useragent)
 }
+pb = None
+def showProgressBar(bNum, bSize, tSize):
+    global pb
+    if pb is None:
+        pb = progressbar.ProgressBar(maxval=tSize)
+        pb.start()
+    downloaded = bNum*bSize
+    if downloaded < tSize:
+        pb.update(downloaded)
+    else:
+        pb.finish()
+        pb = None
+
+def startDownload():
+    with open('src/prefs.json', 'r') as prefs:
+        settings=json.loads(prefs.read())
+        for name in settings['downloads']:
+            print(f'downloading "{name}"')
+            urllib.request.urlretrieve(settings['downloads'].get(name), 'downloaded/'+name+'.mp4', showProgressBar)
+    print('all done.\nyou can check your downloaded movies/series in the "downloaded" directory.')
+    clearDownloads()
+
 
 def checkPrefs():
     with open('src/prefs.json', 'r') as prefs:
@@ -23,9 +45,36 @@ def checkPrefs():
             writePrefs=open('src/prefs.json', 'w+')
             writePrefs.write(json.dumps(settings))
             writePrefs.close()
+        if settings['downloads']!={}:
+            yN=input('the downloads list is not empty.\ndo you want to start downloading?\n|_(yes/NO)-->> ')
+            if yN.lower().startswith('y'):
+                startDownload()
+            else:
+                yN2=input('do you want to clear downloads?\n|_(yes/NO)-->> ')
+                if yN2.lower().startswith('y'):
+                    clearDownloads()
         return settings['OS']
 
+def addToDownloads(name, url):
+    with open('src/prefs.json', 'r') as prefs:
+        settings=json.loads(prefs.read())
+        settings['downloads'][str(name)]=url
+        print(f'added {name} to downloads')
+        writePrefs=open('src/prefs.json', 'w+')
+        writePrefs.write(json.dumps(settings))
+        writePrefs.close()
+
+def clearDownloads():
+    with open('src/prefs.json', 'r') as prefs:
+        settings=json.loads(prefs.read())
+        settings['downloads']={}
+        writePrefs=open('src/prefs.json', 'w+')
+        writePrefs.write(json.dumps(settings))
+        writePrefs.close()
+        print('cleared downloads.')
+
 def searchSite(query):
+    global headers
     print(f'searching for "{query}", this might take a few seconds depending on your internet speed.')
     moviesList=[]
     query=f"https://lake.egybest.life/explore/?q={makeURL(query)}"
@@ -48,13 +97,22 @@ def searchSite(query):
 def makeURL(query):
     return "".join([i.replace(' ', '-') for i in str(query).lower() if i.isalpha() or i.isdigit() or i==' ']).rstrip()
 
+def makeName(title):
+    return "".join([str(i).replace('season-', 'S').replace('ep-', 'E').replace('-', ' ') for i in str(title)])
+
 def pickMovie(movies):
     for number, title, rating, link in movies:
         print(f'ID: {number}\ntitle: {title}\nrating: {rating}\n|')
-    choice=int(input('|_(choose by ID)-->> '))
-    link=(movies[choice-1])[3]
-    title=(movies[choice-1])[1]
-    return link, makeURL(str(title))
+    choice=input('|_(choose by ID)-->> ')
+    if choice.isdigit() and 0<int(choice)<len(movies):
+        link=(movies[int(choice)-1])[3]
+        title=(movies[int(choice)-1])[1]
+        return link, makeURL(str(title))
+    else:
+        print(f'invalid option. defaulting to the first entry: "{movies[0][1]}"')
+        link=(movies[0])[3]
+        title=(movies[0])[1]
+        return link, makeURL(str(title))
 
 def setupSelenium(operatingSystem):
     chromeOptions=webdriver.ChromeOptions()
@@ -80,33 +138,27 @@ def chooseResolution(attribs):
     for quality, resolution, size, button in attribs:
         print(f'{count}- quality: {str(quality).strip()}, resolution: {str(resolution).strip()}, size: {str(size).strip()}')
         count+=1
-    try:
-        chosenResolution=int(input('|_(choose by number)-->> '))
-        if chosenResolution<=len(attribs):
-            return chosenResolution
-        else:
-            print('invalid option')
-            chooseResolution(attribs)
-    except:
-        print('invalid option.')
-        chooseResolution(attribs)
+    chosenResolution=input('|_(choose by number)-->> ')
+    if chosenResolution.isdigit() and int(chosenResolution)<=len(attribs):
+        return int(chosenResolution)
+    else:
+        print(f'invalid option. defaulting to the highest resolution: {(attribs[1][0])}')
+        return 1
 
 def chooseSeason(seasons):
-    try:
-        print(f'this series has {len(seasons)} seasons.\npick a season:')
-        for i in range(len(seasons)):
-            print(f'|Season {i+1}')
-        chosenSeason=int(input(f'\n|_(choose by number)-->> '))
-        if chosenSeason<=len(seasons):
-            return chosenSeason
-        else:
-            print('invalid option')
-            chooseSeason(seasons)
-    except:
-        print('invalid option.')
-        chooseSeason(seasons)
+    print(f'this series has {len(seasons)} seasons.\npick a season:')
+    for i in range(len(seasons)):
+        print(f'|season {i+1}')
+    chosenSeason=input(f'\n|_(choose by number)-->> ')
+    if chosenSeason.isdigit() and 0<int(chosenSeason)<=len(seasons):
+        return chosenSeason
+    else:
+        print(f'invalid option. defaulting to the latest season: season {len(seasons)}')
+        return len(seasons)
+
 
 def checkSeasons(link):
+    global headers
     seasons={}
     text=requests.get(link, headers=headers).text
     soup=BeautifulSoup(text, 'html.parser')
@@ -121,6 +173,7 @@ def checkSeasons(link):
     return seasons
 
 def checkEpisodes(chosenSeason):
+    global headers
     episodes={}
     text=requests.get(chosenSeason, headers=headers).text
     soup=BeautifulSoup(text, 'html.parser')
@@ -134,37 +187,68 @@ def checkEpisodes(chosenSeason):
         count-=1
     return episodes
 
-def chooseEpisode(episodes):
+def choosePattern(episodes):
+    print(f'this season has {len(episodes)} episodes.\ndo you want to:')
+    print(f'1- download all\n2- download range (e.g: 5 - 13)\n3- download specific episodes (e.g: 1, 7, 6, 8)')
     try:
-        print(f'this season has {len(episodes)} episodes.\npick an episode:')
-        for i in range(len(episodes)):
-            print(f'|Episode {i+1}')
-        chosenEpisode=int(input(f'\n|_(choose by number)-->> '))
-        if chosenEpisode<=len(episodes):
-            return chosenEpisode
-        else:
-            print('invalid option')
-            chooseEpisode(episodes)
+        chosenPattern=int(input(f'\n|_(choose by number)-->> '))
+        return chosenPattern if 0<chosenPattern<=3 else 3
     except:
-        print('invalid option.')
-        chooseEpisode(episodes)
+        print('invalid option. defaulting to option 3: specific episodes.')
+        return 3
+
+def chooseEpisodes(operatingSystem, chosenPattern, chosenSeason, episodes, title):
+    if chosenPattern==1:
+        print('downloading all episodes')
+        for i in range(len(episodes)):
+            getDownloadLink(operatingSystem, episodes.get(i+1), title, single=False, season=chosenSeason, episode=i)
+    elif chosenPattern==2:
+        try:
+            print('choose range of episodes (n - m):')
+            epRange=list(map(int, input('|_(n - m)--> ').replace(' ', '').split('-')))
+            epRange=[abs(i) for i in epRange]
+            epRange=[j+1 if j==0 else (len(episodes) if j>len(episodes) else j) for j in epRange]
+            print(f'downloading from episode {epRange[0]} to episode {epRange[1]}')
+            for k in range(epRange[0], epRange[1]+1):
+                getDownloadLink(operatingSystem, episodes.get(k), title, single=False, season=chosenSeason, episode=k)
+        except:
+            print(f'invalid range. defaulting to latest two episodes: episode {len(episodes)-1} and episode {len(episodes)}')
+            for k in range(len(episodes)-1, len(episodes)+1):
+                getDownloadLink(operatingSystem, episodes.get(k), title, single=False, season=chosenSeason, episode=k)
+    else:
+        for i in range(len(episodes)):
+            print(f'episode {i+1}')
+        try:
+            epsList=list(map(int, input('|_(x, y, z)-->> ').replace(' ', '').split(',')))
+            epsList=[abs(j) for j in epsList]
+            epsList=[k+1 if k==0 else (len(episodes) if k>len(episodes) else k) for k in epsList]
+            print('downloading episodes: '+', '.join([str(l) for l in epsList]))
+            for m in epsList:
+                getDownloadLink(operatingSystem, episodes.get(int(m)), title, season=chosenSeason, episode=m, defaultName=False)
+        except:
+            print(f'invalid option. defaulting to the latest episode: episode {len(episodes)}')
+            getDownloadLink(operatingSystem, episodes.get(len(episodes)), title, season=chosenSeason, episode=len(episodes), defaultName=False)
+    yN=input('start download?\n|_("y/Y/yes" to start, "n/N/no" to continue)-->> ')
+    if yN.lower().startswith('y'):
+        startDownload()
+                
 
 def checkMediaType(operatingSystem, link, title):
     print('checking media type...')
     if 'series' in str(link):
-        print(f'series: {title}')
+        print(f'series: {makeName(title)}')
         seasons=checkSeasons(link)
         chosenSeason=chooseSeason(seasons)
-        chosenSeason=seasons.get(chosenSeason)
-        episodes=checkEpisodes(chosenSeason)
-        chosenEpisode=chooseEpisode(episodes)
-        chosenEpisode=episodes.get(chosenEpisode)
-        getDownloadLink(operatingSystem, chosenEpisode, title)
+        chosenSeasonLink=seasons.get(chosenSeason)
+        episodes=checkEpisodes(chosenSeasonLink)
+        chosenPattern=choosePattern(episodes)
+        chooseEpisodes(operatingSystem, chosenPattern, chosenSeason, episodes, title)
     else:
-        print(f'movie: {title}')
+        print(f'movie: {makeName(title)}')
         getDownloadLink(operatingSystem, link, title)
 
-def getDownloadLink(operatingSystem, link, title):
+def getDownloadLink(operatingSystem, link, title, single=True, defaultName=True, season='', episode=''):
+    global headers
     print('getting available resolutions, this will take a while depending on your internet speed.')
     driver=setupSelenium(operatingSystem)
     text=requests.get(link, headers=headers).text
@@ -183,7 +267,10 @@ def getDownloadLink(operatingSystem, link, title):
         dl=i[3]
         buttons=dl.find('a')
         attribs.append([quality, resolution, size, buttons])
-    x=chooseResolution(attribs)
+    if single:
+        x=chooseResolution(attribs)
+    else:
+        x=1
     downloadURL=''
     wgetDownload=''
     while downloadURL=='':
@@ -216,8 +303,18 @@ def getDownloadLink(operatingSystem, link, title):
         except(TimeoutException):
             driver.execute_script('window.stop();')
             continue
-    print(f'adding {title} to downloads')
-    driver.get(wgetDownload)
+    if not single or not defaultName:
+        title=makeName(title)
+        title=f'{title}-S{season}E{episode}'
+        addToDownloads(title, wgetDownload)
+    else:
+        print(f'adding {makeName(title)} to downloads')
+        addToDownloads(makeName(title), wgetDownload)
+    driver.quit()
+    if single and defaultName:
+        yN=input('start download?\n|_("y/Y/yes" to start, "n/N/no" to continue)-->> ')
+        if yN.lower().startswith('y'):
+            startDownload()
     
 def manageRedirects(driver, currentURL, x, title):
     if '&r=' in str(currentURL):

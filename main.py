@@ -1,9 +1,10 @@
 from src.defs import *
 display = Display(visible=0, size=(800, 600))
 display.start()
+
+operatingSystem=checkPrefs()
 while True:
     try:
-        operatingSystem=checkPrefs()
         name=input('movie/series name: ')
         movies=searchSite(name)
         if not movies:
