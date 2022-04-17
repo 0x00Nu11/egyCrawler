@@ -1,6 +1,4 @@
 from src.defs import *
-display = Display(visible=0, size=(800, 600))
-display.start()
 
 operatingSystem=checkPrefs()
 while True:
@@ -15,4 +13,3 @@ while True:
     except(KeyboardInterrupt):
         print('\n|_--> quitting...')
         break
-display.stop()

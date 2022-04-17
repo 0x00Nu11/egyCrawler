@@ -4,7 +4,6 @@ from selenium import webdriver
 from selenium.webdriver import ActionChains
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import TimeoutException
-from pyvirtualdisplay import Display
 import requests, json, time, sys, urllib.request, progressbar
 
 useragent=UserAgent().chrome
@@ -12,6 +11,7 @@ headers={
     "accept-language": "en-US,en;q=0.9",
     "user-agent": str(useragent)
 }
+
 pb = None
 def showProgressBar(bNum, bSize, tSize):
     global pb
@@ -123,6 +123,7 @@ def setupSelenium(operatingSystem):
     chromeOptions.add_argument('--incognito')
     chromeOptions.add_argument('--log-level=OFF')
     chromeOptions.add_argument('--disable-extensions')
+    chromeOptions.add_argument('--headless')
     chromeOptions.add_experimental_option('excludeSwitches', ['enable-logging'])
     if operatingSystem=='linux':
         driverBinary=f'src/chromedriver'
@@ -151,7 +152,7 @@ def chooseSeason(seasons):
         print(f'|season {i+1}')
     chosenSeason=input(f'\n|_(choose by number)-->> ')
     if chosenSeason.isdigit() and 0<int(chosenSeason)<=len(seasons):
-        return chosenSeason
+        return int(chosenSeason)
     else:
         print(f'invalid option. defaulting to the latest season: season {len(seasons)}')
         return len(seasons)
@@ -240,6 +241,7 @@ def checkMediaType(operatingSystem, link, title):
         seasons=checkSeasons(link)
         chosenSeason=chooseSeason(seasons)
         chosenSeasonLink=seasons.get(chosenSeason)
+        print(chosenSeasonLink)
         episodes=checkEpisodes(chosenSeasonLink)
         chosenPattern=choosePattern(episodes)
         chooseEpisodes(operatingSystem, chosenPattern, chosenSeason, episodes, title)
