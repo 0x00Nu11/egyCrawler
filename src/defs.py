@@ -4,7 +4,7 @@ from selenium import webdriver
 from selenium.webdriver import ActionChains
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import TimeoutException
-import requests, json, time, sys, urllib.request, progressbar
+import requests, json, time, sys, urllib.request, progressbar, os
 
 useragent=UserAgent().chrome
 headers={
@@ -28,9 +28,23 @@ def showProgressBar(bNum, bSize, tSize):
 def startDownload():
     with open('src/prefs.json', 'r') as prefs:
         settings=json.loads(prefs.read())
-        for name in settings['downloads']:
-            print(f'downloading "{name}"')
-            urllib.request.urlretrieve(settings['downloads'].get(name), 'downloaded/'+name+'.mp4', showProgressBar)
+        for fullName in settings['downloads']:
+            if '#' in str(fullName):
+                part=str(fullName).split('#')
+                name=part[0]
+                season=part[1]
+                if not os.path.isdir(f'downloaded/{name}'):
+                    os.mkdir(f'downloaded/{name}/')
+                if not os.path.isdir(f'downloaded/{name}/{season}'):
+                    os.mkdir(f'downloaded/{name}/{season}')
+                episode=part[2]
+                print(f'downloading "{episode}" from "{season}" of "{name}"')
+                urllib.request.urlretrieve(settings['downloads'].get(fullName), f'downloaded/{name}/{season}/{episode}.mp4', showProgressBar)
+            else:
+                print(f'downloading "{fullName}"')
+                if not os.path.isdir(f'downloaded/{fullName}'):
+                    os.mkdir(f'downloaded/{fullName}')
+                urllib.request.urlretrieve(settings['downloads'].get(fullName), f'downloaded/{fullName}/{fullName}.mp4', showProgressBar)
     print('all done.\nyou can check your downloaded movies/series in the "downloaded" directory.')
     clearDownloads()
 
@@ -241,7 +255,6 @@ def checkMediaType(operatingSystem, link, title):
         seasons=checkSeasons(link)
         chosenSeason=chooseSeason(seasons)
         chosenSeasonLink=seasons.get(chosenSeason)
-        print(chosenSeasonLink)
         episodes=checkEpisodes(chosenSeasonLink)
         chosenPattern=choosePattern(episodes)
         chooseEpisodes(operatingSystem, chosenPattern, chosenSeason, episodes, title)
@@ -307,7 +320,7 @@ def getDownloadLink(operatingSystem, link, title, single=True, defaultName=True,
             continue
     if not single or not defaultName:
         title=makeName(title)
-        title=f'{title}-S{season}E{episode}'
+        title=f'{title}#season {season}#spisode {episode}'
         addToDownloads(title, wgetDownload)
     else:
         print(f'adding {makeName(title)} to downloads')
@@ -317,7 +330,7 @@ def getDownloadLink(operatingSystem, link, title, single=True, defaultName=True,
         yN=input('start download?\n|_("y/Y/yes" to start, "n/N/no" to continue)-->> ')
         if yN.lower().startswith('y'):
             startDownload()
-    
+
 def manageRedirects(driver, currentURL, x, title):
     if '&r=' in str(currentURL):
         print("request was blocked. make sure you don't have adblock.\nretrying...")
