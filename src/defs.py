@@ -320,7 +320,7 @@ def getDownloadLink(operatingSystem, link, title, single=True, defaultName=True,
             continue
     if not single or not defaultName:
         title=makeName(title)
-        title=f'{title}#season {season}#spisode {episode}'
+        title=f'{title}#season {season}#episode {episode}'
         addToDownloads(title, wgetDownload)
     else:
         print(f'adding {makeName(title)} to downloads')
