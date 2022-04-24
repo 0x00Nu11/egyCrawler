@@ -40,14 +40,21 @@ def startDownload():
                 episode=part[2]
                 print(f'downloading "{episode}" from "{season}" of "{name}"')
                 urllib.request.urlretrieve(settings['downloads'].get(fullName), f'downloaded/{name}/{season}/{episode}.mp4', showProgressBar)
+                with open('src/prefs.json', 'w') as update:
+                    print('clearing '+settings['downloads'][fullName])
+                    del settings['downloads'][fullName]
+                    json.dump(settings, update)
             else:
                 print(f'downloading "{fullName}"')
                 if not os.path.isdir(f'downloaded/{fullName}'):
                     os.mkdir(f'downloaded/{fullName}')
                 urllib.request.urlretrieve(settings['downloads'].get(fullName), f'downloaded/{fullName}/{fullName}.mp4', showProgressBar)
+                with open('src/prefs.json', 'w') as update:
+                    print('clearing '+settings['downloads'][fullName])
+                    del settings['downloads'][fullName]
+                    json.dump(settings, update)
     print('all done.\nyou can check your downloaded movies/series in the "downloaded" directory.')
     clearDownloads()
-
 
 def checkPrefs():
     with open('src/prefs.json', 'r') as prefs:
