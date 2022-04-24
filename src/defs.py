@@ -257,7 +257,7 @@ def chooseEpisodes(operatingSystem, chosenPattern, chosenSeason, episodes, title
 
 def checkMediaType(operatingSystem, link, title):
     print('checking media type...')
-    if 'series' in str(link):
+    if 'series' in str(link) or 'anime' in str(link):
         print(f'series: {makeName(title)}')
         seasons=checkSeasons(link)
         chosenSeason=chooseSeason(seasons)
