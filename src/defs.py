@@ -4,7 +4,8 @@ from selenium import webdriver
 from selenium.webdriver import ActionChains
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import TimeoutException
-import requests, json, time, sys, urllib.request, progressbar, os, shutil
+from plyer import notification
+import requests, json, time, pySmartDL, sys, os, shutil
 
 useragent=UserAgent().chrome
 headers={
@@ -12,23 +13,37 @@ headers={
     "user-agent": str(useragent)
 }
 
-pb = None
-def showProgressBar(bNum, bSize, tSize):
-    global pb
-    if pb is None:
-        pb = progressbar.ProgressBar(maxval=tSize)
-        pb.start()
-    downloaded = bNum*bSize
-    if downloaded < tSize:
-        pb.update(downloaded)
-    else:
-        pb.finish()
-        pb = None
-
-def startDownload():
-    shutil.copyfile('src/prefs.json', 'src/prefscopy.json')
+def dlProcess(lst):
+    url, filename, fullName = lst[0], lst[1], lst[2]
+    t0=time.time()
+    try:
+        notification.notify(
+            title = 'egyCrawler',
+            message = f'started downloading {fullName}.',
+            app_icon = "src/egyCrawler-icon.ico",
+            timeout = 10,
+        )
+        print(f'downloading "{fullName}" to "{filename}".')
+        dl=pySmartDL.SmartDL(url, filename)
+        dl.start()
+    except Exception as e:
+        return print(f'error downloading: {fullName}', e)
     with open('src/prefs.json', 'r') as prefs:
         settings=json.loads(prefs.read())
+    with open('src/prefs.json', 'w') as update:
+        del settings['downloads'][fullName]
+        json.dump(settings, update)
+    elapsed=round((time.time()-t0)/60, 3)
+    notification.notify(
+        title = 'egyCrawler',
+        message = f'finished downloading {fullName} in {elapsed} minutes',
+        app_icon = "src/egyCrawler-icon.ico",
+        timeout = 10,
+    )
+
+def startDownload():
+    urls=[]
+    shutil.copyfile('src/prefs.json', 'src/prefscopy.json')
     with open('src/prefscopy.json', 'r') as prefscopy:
         settingscopy=json.loads(prefscopy.read())
         for fullName in settingscopy['downloads']:
@@ -41,21 +56,29 @@ def startDownload():
                 if not os.path.isdir(f'downloaded/{name}/{season}'):
                     os.mkdir(f'downloaded/{name}/{season}')
                 episode=part[2]
-                print(f'downloading "{episode}" from "{season}" of "{name}"')
-                urllib.request.urlretrieve(settingscopy['downloads'].get(fullName), f'downloaded/{name}/{season}/{episode}.mp4', showProgressBar)
-                with open('src/prefs.json', 'w') as update:
-                    del settings['downloads'][fullName]
-                    json.dump(settings, update)
+                url=settingscopy['downloads'].get(fullName)
+                filename=f'downloaded/{name}/{season}/{episode}.mp4'
+                urls.append([url, filename, fullName])
             else:
-                print(f'downloading "{fullName}"')
                 if not os.path.isdir(f'downloaded/{fullName}'):
                     os.mkdir(f'downloaded/{fullName}')
-                urllib.request.urlretrieve(settingscopy['downloads'].get(fullName), f'downloaded/{fullName}/{fullName}.mp4', showProgressBar)
-                with open('src/prefs.json', 'w') as update:
-                    del settings['downloads'][fullName]
-                    json.dump(settings, update)
+                url=settingscopy['downloads'].get(fullName)
+                filename=f'downloaded/{fullName}/{fullName}.mp4'
+                urls.append([url, filename, fullName])
     os.remove('src/prefscopy.json')
-    print('all done.\nyou can check your downloaded movies/series in the "downloaded" directory.')
+    t0=time.time()
+    print('donlading...\nyou will be notified when all the downloads are done.')
+    for url in urls:
+        dlProcess(url)
+    elapsed=round((time.time()-t0)/60, 3)
+    print(f'elapsed download time: {elapsed} minutes.')
+    notification.notify(
+        title = 'egyCrawler',
+        message = f'finished all downloads in {elapsed} minutes.',
+        app_icon = "src/egyCrawler-icon.ico",
+        timeout = 10,
+    )
+    print('all done.\nyou can find your downloads in the "downloaded" directory.')
 
 def checkPrefs():
     with open('src/prefs.json', 'r') as prefs:
@@ -85,6 +108,12 @@ def addToDownloads(name, url):
         writePrefs=open('src/prefs.json', 'w+')
         writePrefs.write(json.dumps(settings))
         writePrefs.close()
+    notification.notify(
+        title = 'egyCrawler',
+        message = f'added {name} to download list.',
+        app_icon = "src/egyCrawler-icon.ico",
+        timeout = 10,
+    )
 
 def clearDownloads():
     with open('src/prefs.json', 'r') as prefs:
@@ -94,6 +123,12 @@ def clearDownloads():
         writePrefs.write(json.dumps(settings))
         writePrefs.close()
         print('cleared downloads.')
+    notification.notify(
+        title = 'egyCrawler',
+        message = f'cleared download list.',
+        app_icon = "src/egyCrawler-icon.ico",
+        timeout = 10,
+    )
 
 def searchSite(query):
     global headers
