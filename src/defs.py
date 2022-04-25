@@ -4,7 +4,7 @@ from selenium import webdriver
 from selenium.webdriver import ActionChains
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import TimeoutException
-import requests, json, time, sys, urllib.request, progressbar, os
+import requests, json, time, sys, urllib.request, progressbar, os, shutil
 
 useragent=UserAgent().chrome
 headers={
@@ -26,9 +26,12 @@ def showProgressBar(bNum, bSize, tSize):
         pb = None
 
 def startDownload():
+    shutil.copyfile('src/prefs.json', 'src/prefscopy.json')
     with open('src/prefs.json', 'r') as prefs:
         settings=json.loads(prefs.read())
-        for fullName in settings['downloads']:
+    with open('src/prefscopy.json', 'r') as prefscopy:
+        settingscopy=json.loads(prefscopy.read())
+        for fullName in settingscopy['downloads']:
             if '#' in str(fullName):
                 part=str(fullName).split('#')
                 name=part[0]
@@ -39,22 +42,20 @@ def startDownload():
                     os.mkdir(f'downloaded/{name}/{season}')
                 episode=part[2]
                 print(f'downloading "{episode}" from "{season}" of "{name}"')
-                urllib.request.urlretrieve(settings['downloads'].get(fullName), f'downloaded/{name}/{season}/{episode}.mp4', showProgressBar)
+                urllib.request.urlretrieve(settingscopy['downloads'].get(fullName), f'downloaded/{name}/{season}/{episode}.mp4', showProgressBar)
                 with open('src/prefs.json', 'w') as update:
-                    print('clearing '+settings['downloads'][fullName])
                     del settings['downloads'][fullName]
                     json.dump(settings, update)
             else:
                 print(f'downloading "{fullName}"')
                 if not os.path.isdir(f'downloaded/{fullName}'):
                     os.mkdir(f'downloaded/{fullName}')
-                urllib.request.urlretrieve(settings['downloads'].get(fullName), f'downloaded/{fullName}/{fullName}.mp4', showProgressBar)
+                urllib.request.urlretrieve(settingscopy['downloads'].get(fullName), f'downloaded/{fullName}/{fullName}.mp4', showProgressBar)
                 with open('src/prefs.json', 'w') as update:
-                    print('clearing '+settings['downloads'][fullName])
                     del settings['downloads'][fullName]
                     json.dump(settings, update)
+    os.remove('src/prefscopy.json')
     print('all done.\nyou can check your downloaded movies/series in the "downloaded" directory.')
-    clearDownloads()
 
 def checkPrefs():
     with open('src/prefs.json', 'r') as prefs:
@@ -168,15 +169,49 @@ def chooseResolution(attribs):
         return 1
 
 def chooseSeason(seasons):
-    print(f'this series has {len(seasons)} seasons.\npick a season:')
-    for i in range(len(seasons)):
-        print(f'|season {i+1}')
-    chosenSeason=input(f'\n|_(choose by number)-->> ')
-    if chosenSeason.isdigit() and 0<int(chosenSeason)<=len(seasons):
-        return int(chosenSeason)
+    print(f'this series has {len(seasons)} seasons. do you want to:')
+    print('1- download all\n2- download range (e.g: 5 - 13)\n3- download specific seasons (e.g: 1, 7, 6, 8)')
+    try:
+        chosenPattern=int(input(f'\n|_(choose by number)-->> '))
+        chosenPattern=(chosenPattern if 0<chosenPattern<=3 else 3)
+    except:
+        print('invalid option. defaulting to option 3: specific seasons.')
+        chosenPattern=3
+    if chosenPattern==1:
+        print(f'downloading all {len(seasons)} seasons.')
+        seasonslist=[]
+        for i in range(len(seasons)):
+            seasonslist.append(i+1)
+        return seasonslist, 'auto'
+    elif chosenPattern==2:
+        try:
+            print('choose range of seasons (n - m):')
+            seRange=list(map(int, input('|_(n - m)--> ').replace(' ', '').split('-')))
+            seRange=[abs(i) for i in seRange]
+            seRange=[j+1 if j==0 else (len(seasons) if j>len(seasons) else j) for j in seRange]
+            print(f'downloading from season {seRange[0]} to season {seRange[1]}')
+            seasonslist=[]
+            for k in range(seRange[0], seRange[1]+1):
+                seasonslist.append(k)
+            return seasonslist, 'auto'
+        except:
+            print(f'invalid range. defaulting to latest season: season {len(seasons)}')
+            return list(len(seasons)), 'man'
     else:
-        print(f'invalid option. defaulting to the latest season: season {len(seasons)}')
-        return len(seasons)
+        for i in range(len(seasons)):
+            print(f'season {i+1}')
+        try:
+            sesList=list(map(int, input('|_(x, y, z)-->> ').replace(' ', '').split(',')))
+            sesList=[abs(j) for j in sesList]
+            sesList=[k+1 if k==0 else (len(seasons) if k>len(seasons) else k) for k in sesList]
+            print('downloading seasons: '+', '.join([str(l) for l in sesList]))
+            seasonslist=[]
+            for m in sesList:
+                seasonslist.append(m)
+            return seasonslist, 'man'
+        except:
+            print(f'invalid option. defaulting to the latest season: season {len(seasons)}')
+            return [len(seasons)], 'man'
 
 
 def checkSeasons(link):
@@ -219,11 +254,11 @@ def choosePattern(episodes):
         print('invalid option. defaulting to option 3: specific episodes.')
         return 3
 
-def chooseEpisodes(operatingSystem, chosenPattern, chosenSeason, episodes, title):
+def chooseEpisodes(operatingSystem, chosenPattern, chosenSeason, episodes, title, mode='man'):
     if chosenPattern==1:
         print('downloading all episodes')
         for i in range(len(episodes)):
-            getDownloadLink(operatingSystem, episodes.get(i+1), title, single=False, season=chosenSeason, episode=i)
+            getDownloadLink(operatingSystem, episodes.get(i+1), title, single=False, season=chosenSeason, episode=i+1)
     elif chosenPattern==2:
         try:
             print('choose range of episodes (n - m):')
@@ -250,9 +285,10 @@ def chooseEpisodes(operatingSystem, chosenPattern, chosenSeason, episodes, title
         except:
             print(f'invalid option. defaulting to the latest episode: episode {len(episodes)}')
             getDownloadLink(operatingSystem, episodes.get(len(episodes)), title, season=chosenSeason, episode=len(episodes), defaultName=False)
-    yN=input('start download?\n|_("y/Y/yes" to start, "n/N/no" to continue)-->> ')
-    if yN.lower().startswith('y'):
-        startDownload()
+    if mode!='auto':
+        yN=input('start download?\n|_("y/Y/yes" to start, "n/N/no" to continue)-->> ')
+        if yN.lower().startswith('y'):
+            startDownload()
                 
 
 def checkMediaType(operatingSystem, link, title):
@@ -260,11 +296,17 @@ def checkMediaType(operatingSystem, link, title):
     if 'series' in str(link) or 'anime' in str(link):
         print(f'series: {makeName(title)}')
         seasons=checkSeasons(link)
-        chosenSeason=chooseSeason(seasons)
-        chosenSeasonLink=seasons.get(chosenSeason)
-        episodes=checkEpisodes(chosenSeasonLink)
-        chosenPattern=choosePattern(episodes)
-        chooseEpisodes(operatingSystem, chosenPattern, chosenSeason, episodes, title)
+        chosenSeason, mode=chooseSeason(seasons)
+        for i in chosenSeason:
+            chosenSeasonLink=seasons.get(i)
+            episodes=checkEpisodes(chosenSeasonLink)
+            if mode=='auto':
+                chosenPattern=1
+                chooseEpisodes(operatingSystem, chosenPattern, i, episodes, title, mode)
+                startDownload()
+            else:
+                chosenPattern=choosePattern(episodes)
+                chooseEpisodes(operatingSystem, chosenPattern, i, episodes, title)
     else:
         print(f'movie: {makeName(title)}')
         getDownloadLink(operatingSystem, link, title)
