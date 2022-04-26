@@ -328,13 +328,35 @@ def chooseEpisodes(operatingSystem, chosenPattern, chosenSeason, episodes, title
 
 def checkMediaType(operatingSystem, link, title):
     print('checking media type...')
-    if 'series' in str(link) or 'anime' in str(link):
+    if 'series' in str(link):
         print(f'series: {makeName(title)}')
         seasons=checkSeasons(link)
         chosenSeason, mode=chooseSeason(seasons)
         for i in chosenSeason:
             chosenSeasonLink=seasons.get(i)
             episodes=checkEpisodes(chosenSeasonLink)
+            if mode=='auto':
+                chosenPattern=1
+                chooseEpisodes(operatingSystem, chosenPattern, i, episodes, title, mode)
+                startDownload()
+            else:
+                chosenPattern=choosePattern(episodes)
+                chooseEpisodes(operatingSystem, chosenPattern, i, episodes, title)
+    elif 'anime' in str(link):
+        print(f'anime: {makeName(title)}')
+        seasons=checkSeasons(link)
+        chosenSeason, mode=chooseSeason(seasons)
+        for i in chosenSeason:
+            chosenSeasonLink=seasons.get(i)
+            eps=checkEpisodes(chosenSeasonLink)
+            nums=[]
+            lnks=[]
+            episodes={}
+            for elem in eps:
+                nums.append(elem)
+                lnks.append(eps.get(elem))
+            nums.reverse()
+            episodes={nums[i]: lnks[i] for i in range(len(nums))}
             if mode=='auto':
                 chosenPattern=1
                 chooseEpisodes(operatingSystem, chosenPattern, i, episodes, title, mode)
