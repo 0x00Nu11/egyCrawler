@@ -1,8 +1,11 @@
 # egyCrawler
  spaghetti python code to download egybest content from cli
+
 ### single and batch downloads
-[single download](.assets/single_download.mp4)
-[batch download](.assets/batch_download.mp4)
+#### single download
+https://user-images.githubusercontent.com/101659928/166084633-8d35de37-1faf-47ca-a84f-3db56196529b.mp4
+#### batch download
+https://user-images.githubusercontent.com/101659928/166084597-87aaa832-a6d3-4048-afae-553c7d6807a9.mp4
 
 ## download
 ### from release
